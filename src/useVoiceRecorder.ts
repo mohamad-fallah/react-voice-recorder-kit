@@ -1,36 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { UseVoiceRecorderOptions, UseVoiceRecorderReturn, RecorderState } from './types'
 
 const BAR_COUNT = 40
-
-export type UseVoiceRecorderOptions = {
-  autoStart?: boolean
-  onStop?: (file: File, url: string) => void
-  onDelete?: () => void
-}
-
-export type UseVoiceRecorderReturn = {
-  isRecording: boolean
-  isStopped: boolean
-  isPlaying: boolean
-  isPaused: boolean
-  seconds: number
-  levels: number[]
-  error: string | null
-  audioUrl: string | null
-  audioFile: File | null
-  start: () => void
-  togglePause: () => void
-  stop: () => void
-  togglePlay: () => void
-  deleteRecording: () => void
-  restart: () => void
-}
 
 export function useVoiceRecorder(options: UseVoiceRecorderOptions = {}): UseVoiceRecorderReturn {
   const { autoStart = true, onStop, onDelete } = options
 
   const [isRecording, setIsRecording] = useState(false)
   const [isStopped, setIsStopped] = useState(false)
+  const [isTemporaryStopped, setIsTemporaryStopped] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
   const [isPaused, setIsPaused] = useState(false)
   const [seconds, setSeconds] = useState(0)
@@ -55,6 +33,10 @@ export function useVoiceRecorder(options: UseVoiceRecorderOptions = {}): UseVoic
 
   const lastUrlRef = useRef<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const previousChunksRef = useRef<Blob[]>([])
+  const isResumingRef = useRef(false)
+  const isRestartingRef = useRef(false)
+  const isTemporaryStopRef = useRef(false)
 
   const cleanupStream = useCallback(() => {
     if (streamRef.current) {
@@ -201,16 +183,264 @@ const animateLevels = useCallback(() => {
     if (typeof window === 'undefined') return
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      setError('مرورگر از ضبط صدا پشتیبانی نمی‌کند.')
+      setError('Browser does not support audio recording.')
       return
     }
 
     setError(null)
+    isResumingRef.current = false
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
       chunksRef.current = []
+      previousChunksRef.current = []
+
+      setupAudioGraph(stream)
+      startRecordingTimer()
+
+      const mediaRecorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = mediaRecorder
+
+      mediaRecorder.ondataavailable = (event: BlobEvent) => {
+        if (event.data && event.data.size > 0) {
+          chunksRef.current.push(event.data)
+        }
+      }
+
+      mediaRecorder.onstop = () => {
+        cleanupAudioContext()
+        cleanupStream()
+        stopTimer()
+        setIsRecording(false)
+        setIsPaused(false)
+        pausedTimeRef.current = 0
+
+        if (isResumingRef.current) {
+          isResumingRef.current = false
+          return
+        }
+
+        if (isRestartingRef.current) {
+          isRestartingRef.current = false
+          return
+        }
+
+        if (chunksRef.current.length === 0) return
+
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
+
+        if (lastUrlRef.current) {
+          URL.revokeObjectURL(lastUrlRef.current)
+        }
+        const url = URL.createObjectURL(blob)
+        lastUrlRef.current = url
+        setAudioUrl(url)
+
+        const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' })
+        setAudioFile(file)
+
+        if (isTemporaryStopRef.current) {
+          setIsTemporaryStopped(true)
+          setIsStopped(true)
+          isTemporaryStopRef.current = false
+        } else {
+          setIsStopped(true)
+          setIsTemporaryStopped(false)
+          if (onStop) {
+            onStop(file, url)
+          }
+        }
+      }
+
+      mediaRecorder.start()
+      setIsRecording(true)
+      setIsPaused(false)
+      setIsStopped(false)
+      pausedTimeRef.current = 0
+    } catch {
+      setError('Microphone access denied or an error occurred.')
+      cleanupAudioContext()
+      cleanupStream()
+      stopTimer()
+      setIsRecording(false)
+    }
+  }, [cleanupAudioContext, cleanupStream, onStop, setupAudioGraph, startRecordingTimer, stopTimer])
+
+  const start = useCallback(() => {
+    void internalStartRecording()
+  }, [internalStartRecording])
+
+  const handlePause = useCallback(() => {
+    const mediaRecorder = mediaRecorderRef.current
+    if (!mediaRecorder || mediaRecorder.state !== 'recording') return
+
+    try {
+      mediaRecorder.pause()
+      stopTimer()
+      pausedTimeRef.current = seconds
+      setIsPaused(true)
+      if (animationFrameIdRef.current !== null) {
+        cancelAnimationFrame(animationFrameIdRef.current)
+        animationFrameIdRef.current = null
+      }
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        void audioContextRef.current.suspend()
+      }
+      setLevels(Array.from({ length: BAR_COUNT }, () => 0.15))
+    } catch {
+      setError('Error pausing recording')
+    }
+  }, [seconds, stopTimer])
+
+  const handleStopTemporary = useCallback(() => {
+    const mediaRecorder = mediaRecorderRef.current
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      previousChunksRef.current = [...chunksRef.current]
+      isTemporaryStopRef.current = true
+      mediaRecorder.stop()
+      setIsStopped(true)
+      setIsPaused(false)
+      pausedTimeRef.current = 0
+    } else {
+      cleanupAudioContext()
+      cleanupStream()
+      stopTimer()
+      setIsRecording(false)
+      setIsStopped(true)
+      setIsTemporaryStopped(true)
+      setIsPaused(false)
+      pausedTimeRef.current = 0
+    }
+  }, [cleanupAudioContext, cleanupStream, stopTimer])
+
+  const handleStop = useCallback(() => {
+    const mediaRecorder = mediaRecorderRef.current
+    if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+      previousChunksRef.current = [...chunksRef.current]
+      isTemporaryStopRef.current = false
+      mediaRecorder.stop()
+      setIsStopped(true)
+      setIsTemporaryStopped(false)
+      setIsPaused(false)
+      pausedTimeRef.current = 0
+    } else {
+      if (audioUrl && audioFile && onStop) {
+        onStop(audioFile, audioUrl)
+      }
+      cleanupAudioContext()
+      cleanupStream()
+      stopTimer()
+      setIsRecording(false)
+      setIsStopped(true)
+      setIsTemporaryStopped(false)
+      setIsPaused(false)
+      pausedTimeRef.current = 0
+    }
+  }, [cleanupAudioContext, cleanupStream, stopTimer, audioUrl, audioFile, onStop])
+
+  const handlePreviewPlay = useCallback(() => {
+    if (!audioUrl) return
+
+    if (!audioRef.current) {
+      const audio = new Audio(audioUrl)
+      audioRef.current = audio
+
+      audio.onended = () => {
+        setIsPlaying(false)
+        stopTimer()
+        cleanupAudioContext()
+        audio.currentTime = 0
+        setSeconds(0)
+      }
+
+      audio.onpause = () => {
+        setIsPlaying(false)
+        stopTimer()
+        cleanupAudioContext()
+      }
+
+      audio.onplay = () => {
+        setIsPlaying(true)
+        cleanupAudioContext()
+        setupPlaybackGraph(audio)
+        startPlaybackTimer(audio)
+      }
+    }
+
+    const audio = audioRef.current
+    if (!audio) return
+
+    if (isPlaying) {
+      audio.pause()
+    } else {
+      if (audio.ended || (audio.duration && audio.currentTime >= audio.duration - 0.01)) {
+        audio.currentTime = 0
+        setSeconds(0)
+      }
+      void audio.play()
+    }
+  }, [audioUrl, cleanupAudioContext, isPlaying, setupPlaybackGraph, startPlaybackTimer, stopTimer])
+
+  const handlePlay = useCallback(() => {
+    if (!audioUrl) return
+
+    if (!audioRef.current) {
+      const audio = new Audio(audioUrl)
+      audioRef.current = audio
+
+      audio.onended = () => {
+        setIsPlaying(false)
+        stopTimer()
+        cleanupAudioContext()
+        audio.currentTime = 0
+        setSeconds(0)
+      }
+
+      audio.onpause = () => {
+        setIsPlaying(false)
+        stopTimer()
+        cleanupAudioContext()
+      }
+
+      audio.onplay = () => {
+        setIsPlaying(true)
+        cleanupAudioContext()
+        setupPlaybackGraph(audio)
+        startPlaybackTimer(audio)
+      }
+    }
+
+    const audio = audioRef.current
+    if (!audio) return
+
+    if (isPlaying) {
+      audio.pause()
+    } else {
+      if (audio.ended || (audio.duration && audio.currentTime >= audio.duration - 0.01)) {
+        audio.currentTime = 0
+        setSeconds(0)
+      }
+      void audio.play()
+    }
+  }, [audioUrl, cleanupAudioContext, isPlaying, setupPlaybackGraph, startPlaybackTimer, stopTimer])
+
+  const handleResume = useCallback(async () => {
+    if (typeof window === 'undefined') return
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setError('Browser does not support audio recording.')
+      return
+    }
+
+    setError(null)
+    isResumingRef.current = true
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      streamRef.current = stream
+
+      chunksRef.current = [...previousChunksRef.current]
 
       setupAudioGraph(stream)
       startRecordingTimer()
@@ -255,161 +485,74 @@ const animateLevels = useCallback(() => {
       setIsRecording(true)
       setIsPaused(false)
       setIsStopped(false)
-      pausedTimeRef.current = 0
+      setIsTemporaryStopped(false)
+      setIsPlaying(false)
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+      pausedTimeRef.current = seconds
+      startTimeRef.current = Date.now() - pausedTimeRef.current * 1000
     } catch {
-      setError('دسترسی به میکروفن رد شد یا خطایی رخ داد.')
+      setError('Microphone access denied or an error occurred.')
       cleanupAudioContext()
       cleanupStream()
       stopTimer()
       setIsRecording(false)
+      isResumingRef.current = false
     }
-  }, [cleanupAudioContext, cleanupStream, onStop, setupAudioGraph, startRecordingTimer, stopTimer])
+  }, [cleanupAudioContext, cleanupStream, onStop, seconds, setupAudioGraph, startRecordingTimer, stopTimer])
 
-  const start = useCallback(() => {
-    void internalStartRecording()
-  }, [internalStartRecording])
-
-  const togglePause = useCallback(() => {
-    const mediaRecorder = mediaRecorderRef.current
-    if (!mediaRecorder) return
-
-    if (isPaused) {
-      if (mediaRecorder.state === 'paused') {
-        try {
-          mediaRecorder.resume()
-          startRecordingTimer()
-          setIsPaused(false)
-          if (streamRef.current && audioContextRef.current) {
-            void audioContextRef.current.resume()
-            animateLevels()
-          }
-        } catch {
-          setError('خطا در ادامه ضبط')
-        }
-      }
-    } else {
-      if (mediaRecorder.state === 'recording') {
-        try {
-          mediaRecorder.pause()
-          stopTimer()
-          pausedTimeRef.current = seconds
-          setIsPaused(true)
-          if (animationFrameIdRef.current !== null) {
-            cancelAnimationFrame(animationFrameIdRef.current)
-            animationFrameIdRef.current = null
-          }
-          if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-            void audioContextRef.current.suspend()
-          }
-          setLevels(Array.from({ length: BAR_COUNT }, () => 0.15))
-        } catch {
-          setError('خطا در توقف موقت ضبط')
-        }
-      }
-    }
-  }, [animateLevels, isPaused, seconds, startRecordingTimer, stopTimer])
-
-  const stop = useCallback(() => {
+  const handleDelete = useCallback(() => {
     const mediaRecorder = mediaRecorderRef.current
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop()
-      setIsStopped(true)
-      setIsPaused(false)
-      pausedTimeRef.current = 0
-    } else {
-      cleanupAudioContext()
-      cleanupStream()
-      stopTimer()
-      setIsRecording(false)
-      setIsStopped(true)
-      setIsPaused(false)
-      pausedTimeRef.current = 0
     }
-  }, [cleanupAudioContext, cleanupStream, stopTimer])
-
-  const togglePlay = useCallback(() => {
-    if (!audioUrl) return
-
-    if (!audioRef.current) {
-      const audio = new Audio(audioUrl)
-      audioRef.current = audio
-
-      audio.onended = () => {
-        setIsPlaying(false)
-        stopTimer()
-        cleanupAudioContext()
-        audio.currentTime = 0
-        setSeconds(0)
-      }
-
-      audio.onpause = () => {
-        setIsPlaying(false)
-        stopTimer()
-        cleanupAudioContext()
-      }
-
-      audio.onplay = () => {
-        setIsPlaying(true)
-        cleanupAudioContext()
-        setupPlaybackGraph(audio)
-        startPlaybackTimer(audio)
-      }
-    }
-
-    const audio = audioRef.current
-    if (!audio) return
-
-    if (isPlaying) {
-      audio.pause()
-    } else {
-      if (audio.ended || (audio.duration && audio.currentTime >= audio.duration - 0.01)) {
-        audio.currentTime = 0
-        setSeconds(0)
-      }
-      void audio.play()
-    }
-  }, [audioUrl, cleanupAudioContext, isPlaying, setupPlaybackGraph, startPlaybackTimer, stopTimer])
-
-  const deleteRecording = useCallback(() => {
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current = null
     }
+    cleanupAudioContext()
+    cleanupStream()
+    stopTimer()
     setIsPlaying(false)
-    setIsStopped(false)
+    setIsStopped(true)
     setIsRecording(false)
     setIsPaused(false)
     setSeconds(0)
     pausedTimeRef.current = 0
     setLevels(Array.from({ length: BAR_COUNT }, () => 0.15))
-    if (lastUrlRef.current) {
-      URL.revokeObjectURL(lastUrlRef.current)
-      lastUrlRef.current = null
-    }
+    previousChunksRef.current = []
     chunksRef.current = []
-    setAudioUrl(null)
-    setAudioFile(null)
     if (onDelete) {
       onDelete()
     }
-  }, [onDelete])
+  }, [cleanupAudioContext, cleanupStream, onDelete, stopTimer])
 
-  const restart = useCallback(() => {
+  const handleRestart = useCallback(() => {
+    isRestartingRef.current = true
     const mediaRecorder = mediaRecorderRef.current
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop()
+    }
+    if (audioRef.current) {
+      audioRef.current.pause()
+      audioRef.current = null
     }
     cleanupAudioContext()
     cleanupStream()
     stopTimer()
     setIsRecording(false)
     setIsStopped(false)
+    setIsTemporaryStopped(false)
     setIsPaused(false)
     setIsPlaying(false)
     setSeconds(0)
     pausedTimeRef.current = 0
     setLevels(Array.from({ length: BAR_COUNT }, () => 0.15))
+    previousChunksRef.current = []
     chunksRef.current = []
+    isResumingRef.current = false
     if (lastUrlRef.current) {
       URL.revokeObjectURL(lastUrlRef.current)
       lastUrlRef.current = null
@@ -445,9 +588,23 @@ const animateLevels = useCallback(() => {
     }
   }, [autoStart, cleanupAudioContext, cleanupStream, internalStartRecording, stopTimer])
 
+  const getState = (): RecorderState => {
+    if (isPlaying) return 'playing'
+    if (isStopped && !isTemporaryStopped && audioUrl) return 'reviewing'
+    if (isRecording && isPaused) return 'paused'
+    if (isRecording) return 'recording'
+    return 'idle'
+  }
+
+  const handleRecordAgain = useCallback(() => {
+    handleRestart()
+  }, [handleRestart])
+
   return {
+    state: getState(),
     isRecording,
     isStopped,
+    isTemporaryStopped,
     isPlaying,
     isPaused,
     seconds,
@@ -456,10 +613,14 @@ const animateLevels = useCallback(() => {
     audioUrl,
     audioFile,
     start,
-    togglePause,
-    stop,
-    togglePlay,
-    deleteRecording,
-    restart
+    handlePause,
+    handleStopTemporary,
+    handleStop,
+    handleResume,
+    handlePreviewPlay,
+    handlePlay,
+    handleRestart,
+    handleDelete,
+    handleRecordAgain
   }
 }

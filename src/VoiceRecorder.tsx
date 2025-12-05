@@ -1,30 +1,30 @@
 import type { FC, CSSProperties } from 'react'
 import { useMemo, useRef, useEffect, useState } from 'react'
 import { useVoiceRecorder } from './useVoiceRecorder'
-import type { UseVoiceRecorderOptions } from './useVoiceRecorder'
-import { PlayIcon, PauseIcon, StopIcon, DeleteIcon, RepeatIcon } from './icons'
-
-export type VoiceRecorderProps = UseVoiceRecorderOptions & {
-  width?: string | number
-  height?: string | number
-  style?: CSSProperties
-}
+import type { VoiceRecorderProps } from './types'
+import { PlayIcon, PauseIcon, StopIcon, RepeatIcon, DeleteIcon } from './icons'
 
 const VoiceRecorder: FC<VoiceRecorderProps> = (props) => {
   const { width, height, style, ...recorderOptions } = props
   const {
+    state,
     isRecording,
     isStopped,
+    isTemporaryStopped,
     isPlaying,
     isPaused,
     seconds,
     levels,
     error,
-    togglePause,
-    stop,
-    togglePlay,
-    deleteRecording,
-    restart
+    handlePause,
+    handleStopTemporary,
+    handleStop,
+    handleResume,
+    handlePreviewPlay,
+    handlePlay,
+    handleRestart,
+    handleDelete,
+    handleRecordAgain
   } = useVoiceRecorder(recorderOptions)
 
   const containerRef = useRef<HTMLDivElement>(null)
@@ -162,11 +162,12 @@ const VoiceRecorder: FC<VoiceRecorderProps> = (props) => {
         })}
       </div>
 
-      {!isStopped && (
+      {state === 'recording' && (
         <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
           <button
             type="button"
-            onClick={togglePause}
+            onClick={handlePause}
+            title="Pause recording"
             style={{
               width: 28,
               height: 28,
@@ -180,31 +181,112 @@ const VoiceRecorder: FC<VoiceRecorderProps> = (props) => {
               cursor: 'pointer'
             }}
           >
-            {isPaused ? <PlayIcon /> : <PauseIcon />}
+            <PauseIcon />
           </button>
-          {isPaused && (
-            <button
-              type="button"
-              onClick={restart}
-              style={{
-                width: 28,
-                height: 28,
-                borderRadius: 999,
-                border: '1px solid #e5e7eb',
-                backgroundColor: '#ffffff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: 0,
-                cursor: 'pointer'
-              }}
-            >
-              <RepeatIcon />
-            </button>
-          )}
           <button
             type="button"
-            onClick={stop}
+            onClick={handleStopTemporary}
+            title="Stop & Review"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 999,
+              border: '1px solid #e5e7eb',
+              backgroundColor: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+              cursor: 'pointer'
+            }}
+          >
+            <StopIcon />
+          </button>
+          <button
+            type="button"
+            onClick={handleRestart}
+            title="Restart recording"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 999,
+              border: '1px solid #e5e7eb',
+              backgroundColor: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+              cursor: 'pointer'
+            }}
+          >
+            <RepeatIcon />
+          </button>
+        </div>
+      )}
+
+      {state === 'paused' && (
+        <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
+          <button
+            type="button"
+            onClick={handleResume}
+            title="Resume recording"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 999,
+              border: '1px solid #e5e7eb',
+              backgroundColor: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+              cursor: 'pointer'
+            }}
+          >
+            <PlayIcon />
+          </button>
+          <button
+            type="button"
+            onClick={handlePreviewPlay}
+            title="Play preview"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 999,
+              border: '1px solid #e5e7eb',
+              backgroundColor: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+              cursor: 'pointer'
+            }}
+          >
+            {isPlaying ? <PauseIcon /> : <PlayIcon />}
+          </button>
+          <button
+            type="button"
+            onClick={handleRestart}
+            title="Restart recording"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 999,
+              border: '1px solid #e5e7eb',
+              backgroundColor: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+              cursor: 'pointer'
+            }}
+          >
+            <RepeatIcon />
+          </button>
+          <button
+            type="button"
+            onClick={handleStop}
+            title="Stop & Save"
             style={{
               width: 28,
               height: 28,
@@ -223,11 +305,12 @@ const VoiceRecorder: FC<VoiceRecorderProps> = (props) => {
         </div>
       )}
 
-      {isStopped && (
+      {state === 'reviewing' && (
         <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
           <button
             type="button"
-            onClick={togglePlay}
+            onClick={handlePlay}
+            title={isPlaying ? 'Pause playback' : 'Play'}
             style={{
               width: 28,
               height: 28,
@@ -245,7 +328,8 @@ const VoiceRecorder: FC<VoiceRecorderProps> = (props) => {
           </button>
           <button
             type="button"
-            onClick={deleteRecording}
+            onClick={handleDelete}
+            title="Delete recording"
             style={{
               width: 28,
               height: 28,
@@ -261,6 +345,49 @@ const VoiceRecorder: FC<VoiceRecorderProps> = (props) => {
             }}
           >
             <DeleteIcon />
+          </button>
+          <button
+            type="button"
+            onClick={handleRecordAgain}
+            title="Record again"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 999,
+              border: '1px solid #e5e7eb',
+              backgroundColor: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+              cursor: 'pointer'
+            }}
+          >
+            <RepeatIcon />
+          </button>
+        </div>
+      )}
+
+      {state === 'playing' && (
+        <div style={{ display: 'flex', gap: 4, marginLeft: 8 }}>
+          <button
+            type="button"
+            onClick={handlePlay}
+            title="Pause playback"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 999,
+              border: '1px solid #e5e7eb',
+              backgroundColor: '#ffffff',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 0,
+              cursor: 'pointer'
+            }}
+          >
+            <PauseIcon />
           </button>
         </div>
       )}
