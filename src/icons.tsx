@@ -1,6 +1,28 @@
 import type { FC } from 'react'
 
 export const PlayIcon: FC<{ size?: number }> = ({ size = 18 }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <circle
+      cx="12"
+      cy="12"
+      r="9"
+      stroke="currentColor"
+      strokeWidth="1.8"
+    />
+    <path
+      d="M8.5 7L17 12L8.5 17Z"
+      fill="currentColor"
+    />
+  </svg>
+)
+
+export const ResumeIcon: FC<{ size?: number }> = ({ size = 18 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24">
     <polygon points="8,5 19,12 8,19" fill="currentColor" />
   </svg>

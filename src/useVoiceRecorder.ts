@@ -20,23 +20,21 @@ export function useVoiceRecorder(options: UseVoiceRecorderOptions = {}): UseVoic
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
   const streamRef = useRef<MediaStream | null>(null)
-
   const audioContextRef = useRef<AudioContext | null>(null)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const dataArrayRef = useRef<Uint8Array | null>(null)
   const animationFrameIdRef = useRef<number | null>(null)
   const frameCountRef = useRef(0)
-
   const timerRef = useRef<number | null>(null)
   const startTimeRef = useRef<number | null>(null)
   const pausedTimeRef = useRef<number>(0)
-
   const lastUrlRef = useRef<string | null>(null)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const previousChunksRef = useRef<Blob[]>([])
   const isResumingRef = useRef(false)
   const isRestartingRef = useRef(false)
   const isTemporaryStopRef = useRef(false)
+  const temporaryPreviewUrlRef = useRef<string | null>(null)
 
   const cleanupStream = useCallback(() => {
     if (streamRef.current) {
@@ -87,67 +85,55 @@ export function useVoiceRecorder(options: UseVoiceRecorderOptions = {}): UseVoic
     [stopTimer]
   )
 
-const animateLevels = useCallback(() => {
-  const analyser = analyserRef.current
-  const storedArray = dataArrayRef.current
+  const animateLevels = useCallback(() => {
+    const analyser = analyserRef.current
+    const storedArray = dataArrayRef.current
+    if (!analyser || !storedArray) return
 
-  if (!analyser || !storedArray) return
+    const dataArray = new Uint8Array(storedArray)
 
-  const dataArray = new Uint8Array(storedArray)
+    const draw = () => {
+      analyser.getByteFrequencyData(dataArray)
+      const bufferLength = dataArray.length
+      let sum = 0
+      for (let i = 0; i < bufferLength; i += 1) {
+        sum += dataArray[i]
+      }
+      const avg = sum / bufferLength
+      let normalized = (avg / 255) * 3.5
+      const minLevel = 0.05
+      if (normalized < minLevel) normalized = minLevel
+      if (normalized > 1) normalized = 1
 
-  const draw = () => {
-    analyser.getByteFrequencyData(dataArray)
+      frameCountRef.current += 1
+      if (frameCountRef.current >= 5) {
+        setLevels((prev) => {
+          const next = prev.slice(1)
+          next.push(normalized)
+          return next
+        })
+        frameCountRef.current = 0
+      }
 
-    const bufferLength = dataArray.length
-    let sum = 0
-    for (let i = 0; i < bufferLength; i += 1) {
-      sum += dataArray[i]
+      animationFrameIdRef.current = requestAnimationFrame(draw)
     }
-
-    const avg = sum / bufferLength
-    let normalized = (avg / 255) * 3.5
-    const minLevel = 0.05
-    if (normalized < minLevel) normalized = minLevel
-    if (normalized > 1) normalized = 1
-
-    frameCountRef.current += 1
-    if (frameCountRef.current >= 5) {
-      setLevels((prev) => {
-        const next = prev.slice(1)
-        next.push(normalized)
-        return next
-      })
-      frameCountRef.current = 0
-    }
-
-    animationFrameIdRef.current = requestAnimationFrame(draw)
-  }
-
-  draw()
-}, [])
-
-
+    draw()
+  }, [])
 
   const setupAudioGraph = useCallback(
     (stream: MediaStream) => {
       const audioContext = new AudioContext()
       audioContextRef.current = audioContext
-
       const source = audioContext.createMediaStreamSource(stream)
       const analyser = audioContext.createAnalyser()
-
       analyser.fftSize = 512
       analyser.smoothingTimeConstant = 0.6
       const bufferLength = analyser.frequencyBinCount
       const dataArray = new Uint8Array(bufferLength)
-
       analyserRef.current = analyser
       dataArrayRef.current = dataArray
-
       source.connect(analyser)
-
       void audioContext.resume()
-
       animateLevels()
     },
     [animateLevels]
@@ -157,23 +143,17 @@ const animateLevels = useCallback(() => {
     (audio: HTMLAudioElement) => {
       const audioContext = new AudioContext()
       audioContextRef.current = audioContext
-
       const source = audioContext.createMediaElementSource(audio)
       const analyser = audioContext.createAnalyser()
-
       analyser.fftSize = 512
       analyser.smoothingTimeConstant = 0.6
       const bufferLength = analyser.frequencyBinCount
       const dataArray = new Uint8Array(bufferLength)
-
       analyserRef.current = analyser
       dataArrayRef.current = dataArray
-
       source.connect(analyser)
       analyser.connect(audioContext.destination)
-
       void audioContext.resume()
-
       animateLevels()
     },
     [animateLevels]
@@ -181,7 +161,6 @@ const animateLevels = useCallback(() => {
 
   const internalStartRecording = useCallback(async () => {
     if (typeof window === 'undefined') return
-
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setError('Browser does not support audio recording.')
       return
@@ -195,7 +174,6 @@ const animateLevels = useCallback(() => {
       streamRef.current = stream
       chunksRef.current = []
       previousChunksRef.current = []
-
       setupAudioGraph(stream)
       startRecordingTimer()
 
@@ -229,7 +207,6 @@ const animateLevels = useCallback(() => {
         if (chunksRef.current.length === 0) return
 
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-
         if (lastUrlRef.current) {
           URL.revokeObjectURL(lastUrlRef.current)
         }
@@ -276,17 +253,21 @@ const animateLevels = useCallback(() => {
     if (!mediaRecorder || mediaRecorder.state !== 'recording') return
 
     try {
+      mediaRecorder.requestData()
       mediaRecorder.pause()
       stopTimer()
       pausedTimeRef.current = seconds
       setIsPaused(true)
+
       if (animationFrameIdRef.current !== null) {
         cancelAnimationFrame(animationFrameIdRef.current)
         animationFrameIdRef.current = null
       }
+
       if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
         void audioContextRef.current.suspend()
       }
+
       setLevels(Array.from({ length: BAR_COUNT }, () => 0.15))
     } catch {
       setError('Error pausing recording')
@@ -295,27 +276,57 @@ const animateLevels = useCallback(() => {
 
   const handleStopTemporary = useCallback(() => {
     const mediaRecorder = mediaRecorderRef.current
+
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       previousChunksRef.current = [...chunksRef.current]
-      isTemporaryStopRef.current = true
+      isTemporaryStopRef.current = false
+
+      if (mediaRecorder.state === 'recording') {
+        mediaRecorder.requestData()
+      }
       mediaRecorder.stop()
+
+      const allChunks = [...chunksRef.current]
+
+      if (allChunks.length > 0) {
+        const blob = new Blob(allChunks, { type: 'audio/webm' })
+        if (lastUrlRef.current) {
+          URL.revokeObjectURL(lastUrlRef.current)
+        }
+        const url = URL.createObjectURL(blob)
+        lastUrlRef.current = url
+        setAudioUrl(url)
+
+        const file = new File([blob], `voice-${Date.now()}.webm`, { type: 'audio/webm' })
+        setAudioFile(file)
+
+        if (onStop) {
+          onStop(file, url)
+        }
+      }
+
       setIsStopped(true)
+      setIsTemporaryStopped(false)
       setIsPaused(false)
       pausedTimeRef.current = 0
     } else {
+      if (audioUrl && audioFile && onStop) {
+        onStop(audioFile, audioUrl)
+      }
       cleanupAudioContext()
       cleanupStream()
       stopTimer()
       setIsRecording(false)
       setIsStopped(true)
-      setIsTemporaryStopped(true)
+      setIsTemporaryStopped(false)
       setIsPaused(false)
       pausedTimeRef.current = 0
     }
-  }, [cleanupAudioContext, cleanupStream, stopTimer])
+  }, [cleanupAudioContext, cleanupStream, stopTimer, onStop, audioUrl, audioFile])
 
   const handleStop = useCallback(() => {
     const mediaRecorder = mediaRecorderRef.current
+
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       previousChunksRef.current = [...chunksRef.current]
       isTemporaryStopRef.current = false
@@ -340,10 +351,35 @@ const animateLevels = useCallback(() => {
   }, [cleanupAudioContext, cleanupStream, stopTimer, audioUrl, audioFile, onStop])
 
   const handlePreviewPlay = useCallback(() => {
-    if (!audioUrl) return
+    let urlToPlay = audioUrl
 
-    if (!audioRef.current) {
-      const audio = new Audio(audioUrl)
+    if (!urlToPlay && isPaused) {
+      if (temporaryPreviewUrlRef.current) {
+        URL.revokeObjectURL(temporaryPreviewUrlRef.current)
+      }
+
+      const allChunks = chunksRef.current.length > 0 ? chunksRef.current : previousChunksRef.current
+      
+      if (allChunks.length > 0) {
+        const blob = new Blob(allChunks, { type: 'audio/webm' })
+        urlToPlay = URL.createObjectURL(blob)
+        temporaryPreviewUrlRef.current = urlToPlay
+      }
+    }
+
+    if (!urlToPlay) return
+
+    if (temporaryPreviewUrlRef.current && temporaryPreviewUrlRef.current !== urlToPlay) {
+      URL.revokeObjectURL(temporaryPreviewUrlRef.current)
+      temporaryPreviewUrlRef.current = null
+    }
+
+    if (!audioRef.current || audioRef.current.src !== urlToPlay) {
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+      const audio = new Audio(urlToPlay)
       audioRef.current = audio
 
       audio.onended = () => {
@@ -351,15 +387,13 @@ const animateLevels = useCallback(() => {
         stopTimer()
         cleanupAudioContext()
         audio.currentTime = 0
-        setSeconds(0)
+        setSeconds(pausedTimeRef.current) // Reset to total recorded time
       }
-
       audio.onpause = () => {
         setIsPlaying(false)
         stopTimer()
         cleanupAudioContext()
       }
-
       audio.onplay = () => {
         setIsPlaying(true)
         cleanupAudioContext()
@@ -380,7 +414,7 @@ const animateLevels = useCallback(() => {
       }
       void audio.play()
     }
-  }, [audioUrl, cleanupAudioContext, isPlaying, setupPlaybackGraph, startPlaybackTimer, stopTimer])
+  }, [audioUrl, cleanupAudioContext, isPlaying, isPaused, setupPlaybackGraph, startPlaybackTimer, stopTimer])
 
   const handlePlay = useCallback(() => {
     if (!audioUrl) return
@@ -396,13 +430,11 @@ const animateLevels = useCallback(() => {
         audio.currentTime = 0
         setSeconds(0)
       }
-
       audio.onpause = () => {
         setIsPlaying(false)
         stopTimer()
         cleanupAudioContext()
       }
-
       audio.onplay = () => {
         setIsPlaying(true)
         cleanupAudioContext()
@@ -427,7 +459,6 @@ const animateLevels = useCallback(() => {
 
   const handleResume = useCallback(async () => {
     if (typeof window === 'undefined') return
-
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
       setError('Browser does not support audio recording.')
       return
@@ -439,10 +470,10 @@ const animateLevels = useCallback(() => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
-
-      chunksRef.current = [...previousChunksRef.current]
-
       setupAudioGraph(stream)
+      
+      // Force update seconds to the correct total time before starting timer
+      setSeconds(pausedTimeRef.current)
       startRecordingTimer()
 
       const mediaRecorder = new MediaRecorder(stream)
@@ -465,7 +496,6 @@ const animateLevels = useCallback(() => {
         if (chunksRef.current.length === 0) return
 
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
-
         if (lastUrlRef.current) {
           URL.revokeObjectURL(lastUrlRef.current)
         }
@@ -487,11 +517,18 @@ const animateLevels = useCallback(() => {
       setIsStopped(false)
       setIsTemporaryStopped(false)
       setIsPlaying(false)
+
       if (audioRef.current) {
         audioRef.current.pause()
         audioRef.current = null
       }
-      pausedTimeRef.current = seconds
+      if (temporaryPreviewUrlRef.current) {
+        URL.revokeObjectURL(temporaryPreviewUrlRef.current)
+        temporaryPreviewUrlRef.current = null
+      }
+
+      // We removed: pausedTimeRef.current = seconds
+      // So it keeps the correct total time from previous Pause
       startTimeRef.current = Date.now() - pausedTimeRef.current * 1000
     } catch {
       setError('Microphone access denied or an error occurred.')
@@ -501,17 +538,19 @@ const animateLevels = useCallback(() => {
       setIsRecording(false)
       isResumingRef.current = false
     }
-  }, [cleanupAudioContext, cleanupStream, onStop, seconds, setupAudioGraph, startRecordingTimer, stopTimer])
+  }, [cleanupAudioContext, cleanupStream, onStop, setupAudioGraph, startRecordingTimer, stopTimer])
 
   const handleDelete = useCallback(() => {
     const mediaRecorder = mediaRecorderRef.current
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop()
     }
+
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current = null
     }
+
     cleanupAudioContext()
     cleanupStream()
     stopTimer()
@@ -524,6 +563,12 @@ const animateLevels = useCallback(() => {
     setLevels(Array.from({ length: BAR_COUNT }, () => 0.15))
     previousChunksRef.current = []
     chunksRef.current = []
+
+    if (temporaryPreviewUrlRef.current) {
+      URL.revokeObjectURL(temporaryPreviewUrlRef.current)
+      temporaryPreviewUrlRef.current = null
+    }
+
     if (onDelete) {
       onDelete()
     }
@@ -532,13 +577,16 @@ const animateLevels = useCallback(() => {
   const handleRestart = useCallback(() => {
     isRestartingRef.current = true
     const mediaRecorder = mediaRecorderRef.current
+
     if (mediaRecorder && mediaRecorder.state !== 'inactive') {
       mediaRecorder.stop()
     }
+
     if (audioRef.current) {
       audioRef.current.pause()
       audioRef.current = null
     }
+
     cleanupAudioContext()
     cleanupStream()
     stopTimer()
@@ -553,10 +601,17 @@ const animateLevels = useCallback(() => {
     previousChunksRef.current = []
     chunksRef.current = []
     isResumingRef.current = false
+
     if (lastUrlRef.current) {
       URL.revokeObjectURL(lastUrlRef.current)
       lastUrlRef.current = null
     }
+
+    if (temporaryPreviewUrlRef.current) {
+      URL.revokeObjectURL(temporaryPreviewUrlRef.current)
+      temporaryPreviewUrlRef.current = null
+    }
+
     setAudioUrl(null)
     setAudioFile(null)
     void internalStartRecording()
@@ -566,7 +621,6 @@ const animateLevels = useCallback(() => {
     if (autoStart) {
       void internalStartRecording()
     }
-
     return () => {
       const mediaRecorder = mediaRecorderRef.current
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
@@ -575,15 +629,17 @@ const animateLevels = useCallback(() => {
       cleanupAudioContext()
       cleanupStream()
       stopTimer()
-
       if (audioRef.current) {
         audioRef.current.pause()
         audioRef.current = null
       }
-
       if (lastUrlRef.current) {
         URL.revokeObjectURL(lastUrlRef.current)
         lastUrlRef.current = null
+      }
+      if (temporaryPreviewUrlRef.current) {
+        URL.revokeObjectURL(temporaryPreviewUrlRef.current)
+        temporaryPreviewUrlRef.current = null
       }
     }
   }, [autoStart, cleanupAudioContext, cleanupStream, internalStartRecording, stopTimer])
@@ -621,6 +677,6 @@ const animateLevels = useCallback(() => {
     handlePlay,
     handleRestart,
     handleDelete,
-    handleRecordAgain
+    handleRecordAgain,
   }
 }
