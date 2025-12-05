@@ -1,6 +1,6 @@
 {
   "name": "react-voice-recorder-kit",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "React voice recorder component and hook with waveform visualization",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
