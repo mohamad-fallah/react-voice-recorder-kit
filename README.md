@@ -11,6 +11,24 @@ A lightweight React library for voice recording with audio waveform visualizatio
 
 ---
 
+## Screenshots
+
+### Initial State (Ready to Record)
+<p align="center">
+  <img src="assets/Screenshot%202025-12-05%20173340.png" alt="Initial State" width="600"/>
+</p>
+
+### Recording in Progress
+![Recording](assets/Screenshot%202025-12-05%20173347.png)
+
+### Paused State
+![Paused](assets/Screenshot%202025-12-05%20173407.png)
+
+### Recorded Audio Ready to Play (Custom Styled)
+![Completed Recording Custom](assets/Screenshot%202025-12-05%20173519.png)
+
+---
+
 ## Installation
 
 ```bash
