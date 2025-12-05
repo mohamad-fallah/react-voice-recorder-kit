@@ -1,6 +1,6 @@
 {
   "name": "react-voice-recorder-kit",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "React voice recorder component and hook with waveform visualization",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
@@ -8,6 +8,14 @@
   "files": [
     "dist"
   ],
+   "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohamad-fallah/react-voice-recorder-kit.git"
+  },
+  "homepage": "https://github.com/mohamad-fallah/react-voice-recorder-kit#readme",
+  "bugs": {
+    "url": "https://github.com/mohamad-fallah/react-voice-recorder-kit/issues"
+  },
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch --sourcemap",
