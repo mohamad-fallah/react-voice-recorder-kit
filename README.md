@@ -1,6 +1,6 @@
 # react-voice-recorder-kit
 
-A lightweight, dependency-free React voice recorder library with a simple waveform visualization.
+A lightweight React voice recorder library with waveform visualization and no UI framework dependencies.
 
 * No UI framework dependencies (pure React + inline CSS)
 * Built-in animated waveform (40 bars)
@@ -95,6 +95,9 @@ type VoiceRecorderProps = {
   autoStart?: boolean
   onStop?: (file: File, url: string) => void
   onDelete?: () => void
+  width?: string | number
+  height?: string | number
+  style?: CSSProperties
 }
 ```
 
@@ -103,6 +106,9 @@ type VoiceRecorderProps = {
 | autoStart | boolean                           | true      | Automatically start recording on mount |
 | onStop    | (file: File, url: string) => void | undefined | Callback after recording stops         |
 | onDelete  | () => void                        | undefined | Callback after recording is deleted    |
+| width     | string \| number                  | '100%'    | Component width                        |
+| height    | string \| number                  | undefined | Component height                       |
+| style     | CSSProperties                    | undefined | Additional styles for container        |
 
 ---
 
@@ -144,8 +150,27 @@ type UseVoiceRecorderReturn = {
   stop: () => void
   togglePlay: () => void
   deleteRecording: () => void
+  restart: () => void
 }
 ```
+
+| Property        | Type           | Description                                    |
+| --------------- | -------------- | ---------------------------------------------- |
+| isRecording     | boolean        | Whether recording is active                     |
+| isStopped       | boolean        | Whether recording has stopped                   |
+| isPlaying       | boolean        | Whether playback is active                      |
+| isPaused        | boolean        | Whether recording is paused                     |
+| seconds         | number         | Time in seconds                                 |
+| levels          | number[]       | Array of 40 audio levels (0 to 1)               |
+| error           | string \| null | Error message if any                            |
+| audioUrl        | string \| null | URL of the recorded audio file                  |
+| audioFile       | File \| null   | Recorded audio file                             |
+| start           | () => void     | Start recording                                 |
+| togglePause     | () => void     | Pause or resume recording                       |
+| stop            | () => void     | Stop recording                                  |
+| togglePlay      | () => void     | Play or pause playback of recorded file         |
+| deleteRecording | () => void     | Delete recording and reset to initial state     |
+| restart         | () => void     | Restart recording (only available when paused)  |
 
 ---
 
@@ -171,27 +196,45 @@ export default function CustomRecorder() {
     togglePause,
     stop,
     togglePlay,
-    deleteRecording
+    deleteRecording,
+    restart
   } = useVoiceRecorder({ autoStart: false })
+
+  const formatTime = (secs: number) => {
+    const minutes = Math.floor(secs / 60)
+    const sec = secs % 60
+    return `${minutes}:${sec.toString().padStart(2, '0')}`
+  }
 
   return (
     <div style={{ padding: 16, maxWidth: 600 }}>
       <h2>Custom Voice Recorder</h2>
 
       <div style={{ marginBottom: 8 }}>
-        Time: {seconds}s
+        Time: {formatTime(seconds)}
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button onClick={start} disabled={isRecording}>Start</button>
+        <button onClick={start} disabled={isRecording}>
+          Start
+        </button>
         <button onClick={togglePause} disabled={!isRecording && !isPaused}>
           {isPaused ? 'Resume' : 'Pause'}
         </button>
-        <button onClick={stop} disabled={isStopped}>Stop</button>
+        {isPaused && (
+          <button onClick={restart}>
+            Restart
+          </button>
+        )}
+        <button onClick={stop} disabled={isStopped}>
+          Stop
+        </button>
         <button onClick={togglePlay} disabled={!audioUrl}>
           {isPlaying ? 'Pause Playback' : 'Play'}
         </button>
-        <button onClick={deleteRecording} disabled={!audioFile}>Delete</button>
+        <button onClick={deleteRecording} disabled={!audioFile}>
+          Delete
+        </button>
       </div>
 
       {error && (
@@ -222,8 +265,8 @@ export default function CustomRecorder() {
                 background: '#444'
               }}
             />
-          )}
-        )}
+          )
+        })}
       </div>
 
       {audioUrl && (
@@ -235,6 +278,20 @@ export default function CustomRecorder() {
   )
 }
 ```
+
+---
+
+## Features
+
+* Voice recording using MediaRecorder API
+* Animated waveform visualization during recording and playback
+* Pause/resume support
+* Playback support for recorded files
+* Time display in MM:SS format
+* Error handling and error message display
+* Ready-to-use UI with control buttons
+* Customizable style and size
+* No external dependencies
 
 ---
 
