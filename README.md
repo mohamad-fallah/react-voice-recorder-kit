@@ -1,13 +1,13 @@
 # react-voice-recorder-kit
 
-A lightweight React voice recorder library with waveform visualization and no UI framework dependencies.
+A lightweight React library for voice recording with audio waveform visualization and no UI framework dependencies
 
-* No UI framework dependencies (pure React + inline CSS)
-* Built-in animated waveform (40 bars)
+* No UI framework dependencies (Pure React + Inline CSS)
+* Animated audio waveform visualization (40 bars)
 * Ready-to-use component
-* Full-featured custom hook
-* TypeScript support included
-* Works in Next.js, Vite, CRA, etc.
+* Fully customizable hook
+* TypeScript support
+* Compatible with Next.js, Vite, CRA, and more
 
 ---
 
@@ -25,7 +25,7 @@ Requires **React 18+**
 
 ---
 
-## Quick Start (Component Usage)
+## Quick Start (Using Component)
 
 ```tsx
 'use client'
@@ -58,7 +58,7 @@ export default function Page() {
           <audio controls src={url} style={{ width: '100%' }} />
           {file && (
             <p style={{ fontSize: 12, marginTop: 8 }}>
-              File name: {file.name} | size: {file.size} bytes
+              File name: {file.name} | Size: {file.size} bytes
             </p>
           )}
         </div>
@@ -90,31 +90,141 @@ export default function VoicePage() {
 
 ## Component API
 
-```ts
-type VoiceRecorderProps = {
-  autoStart?: boolean
-  onStop?: (file: File, url: string) => void
-  onDelete?: () => void
-  width?: string | number
-  height?: string | number
-  style?: CSSProperties
-}
-```
+### Main Props
 
-| Prop      | Type                              | Default   | Description                            |
-| --------- | --------------------------------- | --------- | -------------------------------------- |
-| autoStart | boolean                           | true      | Automatically start recording on mount |
-| onStop    | (file: File, url: string) => void | undefined | Callback after recording stops         |
-| onDelete  | () => void                        | undefined | Callback after recording is deleted    |
-| width     | string \| number                  | '100%'    | Component width                        |
-| height    | string \| number                  | undefined | Component height                       |
-| style     | CSSProperties                    | undefined | Additional styles for container        |
+| Prop      | Type                              | Default   | Description                                    |
+| --------- | --------------------------------- | --------- | ---------------------------------------------- |
+| autoStart | boolean                           | true      | Auto-start recording on mount                  |
+| onStop    | (file: File, url: string) => void | undefined | Callback after recording stops                 |
+| onDelete  | () => void                        | undefined | Callback after recording is deleted           |
+| width     | string \| number                  | '100%'    | Component width                                |
+| height    | string \| number                  | undefined | Component height                               |
+| style     | CSSProperties                    | undefined | Additional styles for container                |
+
+### Styling Props
+
+| Prop                        | Type                                    | Default                                                      | Description                          |
+| --------------------------- | --------------------------------------- | ------------------------------------------------------------ | ------------------------------------ |
+| backgroundColor             | string                                  | '#ffffff'                                                    | Background color                     |
+| borderColor                 | string                                  | '#e5e7eb'                                                    | Border color                         |
+| borderRadius                | string \| number                        | 4                                                            | Border radius                        |
+| padding                     | string \| number                        | '6px 10px'                                                   | Internal padding                     |
+| gap                         | string \| number                        | 8                                                            | Gap between elements                 |
+| recordingIndicatorColor     | string                                  | '#ef4444'                                                    | Recording indicator color            |
+| idleIndicatorColor          | string                                  | '#9ca3af'                                                    | Idle indicator color                 |
+| timeTextColor               | string                                  | undefined                                                    | Time text color                      |
+| timeFontSize                | string \| number                        | 12                                                           | Time font size                       |
+| timeFontWeight              | string \| number                        | 500                                                          | Time font weight                     |
+| timeFontFamily              | string                                  | 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' | Time font family                     |
+| visualizerBarColor          | string \| (level: number, index: number) => string | '#4b5563'                              | Waveform bar color                   |
+| visualizerBarWidth          | number                                  | 3                                                            | Waveform bar width                   |
+| visualizerBarGap            | number                                  | 4                                                            | Gap between bars                     |
+| visualizerBarHeight         | number                                  | 40                                                           | Waveform bar height                  |
+| visualizerHeight            | number                                  | 40                                                           | Total waveform height                |
+| buttonSize                  | number                                  | 28                                                           | Button size                          |
+| buttonBackgroundColor       | string                                  | '#ffffff'                                                    | Button background color              |
+| buttonBorderColor           | string                                  | '#e5e7eb'                                                    | Button border color                  |
+| buttonBorderRadius          | string \| number                        | 999                                                          | Button border radius                 |
+| buttonHoverBackgroundColor  | string                                  | undefined                                                    | Button hover background color        |
+| buttonGap                   | number                                  | 4                                                            | Gap between buttons                  |
+| errorTextColor              | string                                  | '#dc2626'                                                    | Error text color                     |
+| errorFontSize               | string \| number                        | 10                                                           | Error font size                      |
+| errorFontFamily             | string                                  | 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' | Error font family                    |
+| iconSize                    | number                                  | 18                                                           | Icon size                            |
+| iconColor                   | string                                  | undefined                                                    | Icon color                           |
+
+### Custom Icon Props
+
+| Prop            | Type      | Default   | Description              |
+| --------------- | --------- | --------- | ------------------------ |
+| customPlayIcon  | ReactNode | undefined | Custom play icon         |
+| customPauseIcon | ReactNode | undefined | Custom pause icon        |
+| customStopIcon  | ReactNode | undefined | Custom stop icon         |
+| customResumeIcon| ReactNode | undefined | Custom resume icon       |
+| customDeleteIcon| ReactNode | undefined | Custom delete icon       |
+| customRepeatIcon| ReactNode | undefined | Custom repeat icon       |
 
 ---
 
-## Hook Usage (useVoiceRecorder)
+## Component Usage Examples
 
-If you want full control over UI, use the hook directly.
+### Example 1: Simple Usage
+
+```tsx
+import { VoiceRecorder } from 'react-voice-recorder-kit'
+
+function SimpleRecorder() {
+  return <VoiceRecorder />
+}
+```
+
+### Example 2: Custom Styling
+
+```tsx
+import { VoiceRecorder } from 'react-voice-recorder-kit'
+
+function CustomStyledRecorder() {
+  return (
+    <VoiceRecorder
+      backgroundColor="#f3f4f6"
+      borderColor="#d1d5db"
+      borderRadius={12}
+      recordingIndicatorColor="#10b981"
+      visualizerBarColor="#6366f1"
+      buttonBackgroundColor="#ffffff"
+      buttonHoverBackgroundColor="#f9fafb"
+    />
+  )
+}
+```
+
+### Example 3: Using with Callbacks
+
+```tsx
+import { useState } from 'react'
+import { VoiceRecorder } from 'react-voice-recorder-kit'
+
+function RecorderWithCallbacks() {
+  const [audioFile, setAudioFile] = useState<File | null>(null)
+
+  return (
+    <VoiceRecorder
+      autoStart={false}
+      onStop={(file, url) => {
+        console.log('Recording stopped:', file.name)
+        setAudioFile(file)
+      }}
+      onDelete={() => {
+        console.log('Recording deleted')
+        setAudioFile(null)
+      }}
+    />
+  )
+}
+```
+
+### Example 4: Dynamic Color Waveform
+
+```tsx
+import { VoiceRecorder } from 'react-voice-recorder-kit'
+
+function DynamicColorRecorder() {
+  return (
+    <VoiceRecorder
+      visualizerBarColor={(level, index) => {
+        const hue = (level * 120).toString()
+        return `hsl(${hue}, 70%, 50%)`
+      }}
+    />
+  )
+}
+```
+
+---
+
+## Using the Hook (useVoiceRecorder)
+
+For full control over the UI, you can use the hook directly.
 
 ### Import
 
@@ -132,12 +242,14 @@ type UseVoiceRecorderOptions = {
 }
 ```
 
-### Returned Values
+### Return Values
 
 ```ts
 type UseVoiceRecorderReturn = {
+  state: RecorderState
   isRecording: boolean
   isStopped: boolean
+  isTemporaryStopped: boolean
   isPlaying: boolean
   isPaused: boolean
   seconds: number
@@ -146,35 +258,45 @@ type UseVoiceRecorderReturn = {
   audioUrl: string | null
   audioFile: File | null
   start: () => void
-  togglePause: () => void
-  stop: () => void
-  togglePlay: () => void
-  deleteRecording: () => void
-  restart: () => void
+  handlePause: () => void
+  handleStopTemporary: () => void
+  handleStop: () => void
+  handleResume: () => void
+  handlePreviewPlay: () => void
+  handlePlay: () => void
+  handleRestart: () => void
+  handleDelete: () => void
+  handleRecordAgain: () => void
 }
 ```
 
-| Property        | Type           | Description                                    |
-| --------------- | -------------- | ---------------------------------------------- |
-| isRecording     | boolean        | Whether recording is active                     |
-| isStopped       | boolean        | Whether recording has stopped                   |
-| isPlaying       | boolean        | Whether playback is active                      |
-| isPaused        | boolean        | Whether recording is paused                     |
-| seconds         | number         | Time in seconds                                 |
-| levels          | number[]       | Array of 40 audio levels (0 to 1)               |
-| error           | string \| null | Error message if any                            |
-| audioUrl        | string \| null | URL of the recorded audio file                  |
-| audioFile       | File \| null   | Recorded audio file                             |
-| start           | () => void     | Start recording                                 |
-| togglePause     | () => void     | Pause or resume recording                       |
-| stop            | () => void     | Stop recording                                  |
-| togglePlay      | () => void     | Play or pause playback of recorded file         |
-| deleteRecording | () => void     | Delete recording and reset to initial state     |
-| restart         | () => void     | Restart recording (only available when paused)  |
+| Property          | Type           | Description                                    |
+| ----------------- | -------------- | ---------------------------------------------- |
+| state             | RecorderState  | Current state: 'idle' \| 'recording' \| 'paused' \| 'reviewing' \| 'playing' |
+| isRecording       | boolean        | Is currently recording                         |
+| isStopped         | boolean        | Is recording stopped                           |
+| isTemporaryStopped| boolean        | Is recording temporarily stopped                |
+| isPlaying         | boolean        | Is currently playing                           |
+| isPaused          | boolean        | Is recording paused                            |
+| seconds           | number         | Time in seconds                                |
+| levels            | number[]       | Array of 40 audio levels (0 to 1)              |
+| error             | string \| null | Error message if any                           |
+| audioUrl          | string \| null | URL of recorded audio file                     |
+| audioFile         | File \| null   | Recorded audio file                            |
+| start             | () => void     | Start recording                                |
+| handlePause       | () => void     | Pause recording                                |
+| handleStopTemporary| () => void    | Temporary stop and review                      |
+| handleStop        | () => void     | Stop and save recording                        |
+| handleResume      | () => void     | Resume recording after pause                   |
+| handlePreviewPlay | () => void     | Play preview (in paused state)                 |
+| handlePlay        | () => void     | Play recorded file                             |
+| handleRestart     | () => void     | Restart recording                              |
+| handleDelete      | () => void     | Delete recording and return to initial state   |
+| handleRecordAgain | () => void     | Record again (same as handleRestart)           |
 
 ---
 
-## Full Example Using Hook (Custom UI)
+## Complete Hook Usage Example
 
 ```tsx
 'use client'
@@ -183,6 +305,7 @@ import { useVoiceRecorder } from 'react-voice-recorder-kit'
 
 export default function CustomRecorder() {
   const {
+    state,
     isRecording,
     isPaused,
     isStopped,
@@ -193,11 +316,12 @@ export default function CustomRecorder() {
     audioFile,
     error,
     start,
-    togglePause,
-    stop,
-    togglePlay,
-    deleteRecording,
-    restart
+    handlePause,
+    handleResume,
+    handleStop,
+    handlePlay,
+    handleDelete,
+    handleRestart
   } = useVoiceRecorder({ autoStart: false })
 
   const formatTime = (secs: number) => {
@@ -211,30 +335,39 @@ export default function CustomRecorder() {
       <h2>Custom Voice Recorder</h2>
 
       <div style={{ marginBottom: 8 }}>
-        Time: {formatTime(seconds)}
+        Status: {state} | Time: {formatTime(seconds)}
       </div>
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button onClick={start} disabled={isRecording}>
-          Start
-        </button>
-        <button onClick={togglePause} disabled={!isRecording && !isPaused}>
-          {isPaused ? 'Resume' : 'Pause'}
-        </button>
-        {isPaused && (
-          <button onClick={restart}>
-            Restart
-          </button>
+        {!isRecording && !isStopped && (
+          <button onClick={start}>Start</button>
         )}
-        <button onClick={stop} disabled={isStopped}>
-          Stop
-        </button>
-        <button onClick={togglePlay} disabled={!audioUrl}>
-          {isPlaying ? 'Pause Playback' : 'Play'}
-        </button>
-        <button onClick={deleteRecording} disabled={!audioFile}>
-          Delete
-        </button>
+
+        {isRecording && !isPaused && (
+          <>
+            <button onClick={handlePause}>Pause</button>
+            <button onClick={handleStop}>Stop & Save</button>
+            <button onClick={handleRestart}>Restart</button>
+          </>
+        )}
+
+        {isPaused && (
+          <>
+            <button onClick={handleResume}>Resume</button>
+            <button onClick={handleRestart}>Restart</button>
+            <button onClick={handleStop}>Stop & Save</button>
+          </>
+        )}
+
+        {isStopped && audioUrl && (
+          <>
+            <button onClick={handlePlay}>
+              {isPlaying ? 'Stop Playback' : 'Play'}
+            </button>
+            <button onClick={handleDelete}>Delete</button>
+            <button onClick={handleRestart}>Record Again</button>
+          </>
+        )}
       </div>
 
       {error && (
@@ -281,17 +414,41 @@ export default function CustomRecorder() {
 
 ---
 
+## Recording States (RecorderState)
+
+The component and hook have 5 different states:
+
+- **idle**: Initial state, ready to start
+- **recording**: Currently recording
+- **paused**: Recording paused (can be resumed)
+- **reviewing**: Recording completed and under review
+- **playing**: Playing recorded file
+
+---
+
 ## Features
 
 * Voice recording using MediaRecorder API
-* Animated waveform visualization during recording and playback
-* Pause/resume support
-* Playback support for recorded files
+* Animated audio waveform visualization during recording and playback
+* Support for pause and resume
+* Support for playing recorded files
 * Time display in MM:SS format
 * Error handling and error message display
 * Ready-to-use UI with control buttons
-* Customizable style and size
+* Fully customizable styling and sizing
 * No external dependencies
+* Support for custom icons
+* Dynamic color waveforms
+
+---
+
+## Important Notes
+
+1. Requires microphone access in the browser
+2. Recorded files are saved in WebM format
+3. In paused state, you can play a preview of the recording
+4. You can dynamically set bar colors using `visualizerBarColor`
+5. All created URLs are automatically cleaned up
 
 ---
 
